@@ -36,11 +36,14 @@ export interface Receipt {
 export class ErasureRefused extends Error {
   readonly code: string;
   readonly detail: unknown;
-  constructor(code: string, message: string, detail: unknown = {}) {
+  /** Case the refusal belongs to, so it can be audited after rollback. */
+  readonly caseId: string | null;
+  constructor(code: string, message: string, detail: unknown = {}, caseId: string | null = null) {
     super(message);
     this.name = 'ErasureRefused';
     this.code = code;
     this.detail = detail;
+    this.caseId = caseId;
   }
 }
 
@@ -61,6 +64,52 @@ interface StoredPlanRow {
  * all re-checked here, server-side, at the moment of destruction.
  */
 export async function executeErasure(args: {
+  pool: Pool;
+  objects: ObjectStore;
+  planId: string;
+  maxRows: number;
+  actor: string;
+}): Promise<Receipt> {
+  try {
+    return await runErasureTransaction(args);
+  } catch (error) {
+    if (error instanceof ErasureRefused) {
+      // A refusal must outlive the rollback that caused it. Writing the audit
+      // entry inside the aborted transaction would discard the very record
+      // that proves the system declined to act, so it goes in its own.
+      await recordRefusal(args.pool, args.actor, args.planId, error);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Best-effort audit of a refusal. It must never mask the original refusal, so
+ * a failure to write the entry is swallowed after being surfaced on stderr.
+ */
+async function recordRefusal(
+  pool: Pool,
+  actor: string,
+  planId: string,
+  refusal: ErasureRefused,
+): Promise<void> {
+  try {
+    await withTransaction(pool, (client) =>
+      appendAudit(client, {
+        caseId: refusal.caseId,
+        actor,
+        action: `erasure.refused.${refusal.code}`,
+        detail: { plan_id: planId, code: refusal.code, message: refusal.message, detail: refusal.detail },
+      }),
+    );
+  } catch (error) {
+    process.stderr.write(
+      `failed to record erasure refusal for ${planId}: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+  }
+}
+
+async function runErasureTransaction(args: {
   pool: Pool;
   objects: ObjectStore;
   planId: string;
@@ -103,16 +152,11 @@ export async function executeErasure(args: {
       [customerId],
     );
     if (holds.rows.length > 0) {
-      await appendAudit(client, {
-        caseId: row.case_id,
-        actor,
-        action: 'erasure.refused.legal_hold',
-        detail: { plan_id: planId, customer_id: customerId, holds: holds.rows },
-      });
       throw new ErasureRefused(
         'legal_hold_active',
         `Erasure refused: customer ${customerId} is under an active legal hold.`,
         { holds: holds.rows.map((h) => ({ matterRef: h.matter_ref, reason: h.reason })) },
+        row.case_id,
       );
     }
 
@@ -121,13 +165,7 @@ export async function executeErasure(args: {
       assertPlanExecutable(row.plan, row.plan_hash, customerId, maxRows);
     } catch (error) {
       if (error instanceof PlanValidationError) {
-        await appendAudit(client, {
-          caseId: row.case_id,
-          actor,
-          action: 'erasure.refused.plan_invalid',
-          detail: { plan_id: planId, code: error.code, message: error.message },
-        });
-        throw new ErasureRefused(error.code, error.message);
+        throw new ErasureRefused(error.code, error.message, {}, row.case_id);
       }
       throw error;
     }
