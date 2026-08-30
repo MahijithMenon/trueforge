@@ -90,24 +90,47 @@ Two layers respond. The agent's instructions tell it that record contents are da
 
 ## Architecture
 
+```mermaid
+flowchart TB
+    OP([Operator])
+
+    subgraph browser [" "]
+        CONSOLE["<b>Console</b><br/>React + Vite"]
+    end
+
+    CP["<b>Control plane</b> · Hono<br/>relays approvals · proxies events<br/><i>cannot execute tools</i>"]
+
+    TF["<b>TrueForge harness</b><br/>agent loop · sandbox · subagents · sessions<br/><b>enforces the approval gate</b>"]
+
+    MCP["<b>erasure-mcp</b><br/>9 annotated MCP tools<br/>6 @read-only · 2 @write · <b>1 @destructive</b>"]
+
+    PG[("<b>Postgres</b><br/>app_data · erasure")]
+    OBJ[("<b>Object store</b>")]
+
+    OP -->|"erasure request"| CONSOLE
+    CONSOLE <-->|"one origin<br/>no secrets in browser"| CP
+    CP <-->|"REST + SSE"| TF
+    TF <-->|"MCP over HTTP<br/>bearer auth"| MCP
+    MCP --> PG
+    MCP --> OBJ
+
+    TF -.->|"<b>tool.approval_required</b><br/>blocks until a human decides"| CONSOLE
+    CONSOLE -.->|"<b>user.tool_approval</b><br/>allow / deny"| TF
+
+    CP ==>|"<b>ground truth</b><br/>estate + audit read directly,<br/>bypassing the agent"| PG
+
+    classDef harness fill:#1a2740,stroke:#6e8fff,stroke-width:2px,color:#dbe3f0
+    classDef danger fill:#240f10,stroke:#e5484d,stroke-width:2px,color:#f0a3a5
+    classDef store fill:#101a15,stroke:#48c07a,color:#c8e6d3
+    classDef plain fill:#111722,stroke:#222c3d,color:#dbe3f0
+    class TF harness
+    class MCP danger
+    class PG,OBJ store
+    class CONSOLE,CP,OP plain
+    style browser fill:none,stroke:none
 ```
-  Console (React/Vite)
-      │  one origin, no secrets in the browser
-      ▼
-  Control plane (Hono)  ──────────────► Postgres
-      │   relays approvals,                  ▲  reads estate + audit directly,
-      │   proxies the event stream           │  bypassing the agent
-      ▼                                      │
-  TrueForge harness  ── agent loop, sandbox, subagents, sessions
-      │                    ▲
-      │  MCP over HTTP     │  tool.approval_required  ─┐
-      ▼                    │                           │ blocks until a human decides
-  erasure-mcp  ── 9 annotated tools ───────────────────┘
-      │
-      ├──► Postgres  (app_data: customers, tickets, sessions, marketing, invoices, attachments)
-      │              (erasure: cases, plans, receipts, legal_holds, audit_log)
-      └──► Object store (filesystem stand-in for S3)
-```
+
+The dotted path is the one that matters: `tool.approval_required` is emitted **by the harness**, and nothing proceeds until a `user.tool_approval` decision comes back. The control plane relays that decision; it has no code path that executes the tool itself.
 
 **Why the control plane exists, given the harness does the work:** it keeps the database and the harness off the browser origin, and it serves the estate and audit panels *directly from Postgres*. That last point is deliberate — the operator's view of what happened does not pass through the agent, so if the agent claimed an erasure that did not occur, the console would contradict it.
 
@@ -172,7 +195,11 @@ Secrets live only in `.env`, which is gitignored. No key is committed, logged, o
 ```bash
 npm test         # 52 tests
 npm run lint
+npm run typecheck
 ```
+
+CI runs all of the above on every pull request, including the integration suite
+against a real Postgres service container — see `.github/workflows/ci.yml`.
 
 Integration tests run against a **real Postgres**, in their own `tombstone_test` database, so they exercise the actual SQL, constraints and locking rather than a stand-in. The demo estate is never touched.
 
