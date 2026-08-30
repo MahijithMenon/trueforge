@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# The integration suite talks to a real Postgres rather than a stand-in, so CI
+# provisions one as a service container and runs the same schema and seed the
+# demo uses. A green run here means the SQL, constraints and transactions were
+# actually exercised.
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tombstone
+          POSTGRES_PASSWORD: tombstone
+          POSTGRES_DB: tombstone
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U tombstone -d tombstone"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://tombstone:tombstone@localhost:55432/tombstone
+      TEST_ADMIN_URL: postgres://tombstone:tombstone@localhost:55432/postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.14'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npx eslint .
+
+      - name: Typecheck
+        run: |
+          for pkg in shared erasure-mcp server console; do
+            echo "--- $pkg ---"
+            npx tsc -p "packages/$pkg/tsconfig.json" --noEmit
+          done
+
+      - name: Test
+        run: npx vitest run
+
+      - name: Build console
+        run: npm run build --workspace @tombstone/console
