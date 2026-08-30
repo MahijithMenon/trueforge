@@ -265,21 +265,26 @@ function applyEvent(state: SessionState, event: HarnessEvent): SessionState {
       const turn = event as Extract<HarnessEvent, { type: 'turn.done' }>;
       const status: SessionStatus =
         turn.state?.status === 'error' ? 'error' : turn.state?.status === 'cancelled' ? 'cancelled' : 'done';
+      // A turn can end in error with no message attached. Reporting "error" in
+      // the header while the timeline stays empty leaves the operator with no
+      // idea what happened, so always say something.
+      const failureText =
+        turn.state?.status === 'error'
+          ? (turn.state.error ??
+            'The turn failed and the harness reported no reason. Check the TrueForge logs.')
+          : null;
+
       return {
         ...state,
         status,
         pendingApproval: null,
-        error: turn.state?.error ?? state.error,
+        error: failureText ?? state.error,
         usage: turn.metrics
           ? { totalTokens: turn.metrics.total_tokens, costUsd: turn.metrics.total_cost_in_usd }
           : state.usage,
-        items:
-          turn.state?.status === 'error' && turn.state.error
-            ? [
-                ...state.items,
-                { kind: 'notice', id: `${turn.id}-err`, level: 'error', text: turn.state.error, at },
-              ]
-            : state.items,
+        items: failureText
+          ? [...state.items, { kind: 'notice', id: `${turn.id}-err`, level: 'error', text: failureText, at }]
+          : state.items,
       };
     }
 

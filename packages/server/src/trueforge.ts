@@ -111,17 +111,18 @@ export class TrueForgeClient {
     return this.request('/settings/model-providers');
   }
 
-  createModelProvider(name: string, manifest: unknown): Promise<unknown> {
+  /** The provider is keyed by its manifest `type`; the API takes no name. */
+  createModelProvider(manifest: unknown): Promise<unknown> {
     return this.request('/settings/model-providers', {
       method: 'POST',
-      body: JSON.stringify({ name, manifest }),
+      body: JSON.stringify({ manifest }),
     });
   }
 
-  updateModelProvider(name: string, manifest: unknown): Promise<unknown> {
+  updateModelProvider(manifest: unknown): Promise<unknown> {
     return this.request('/settings/model-providers', {
       method: 'PUT',
-      body: JSON.stringify({ name, manifest }),
+      body: JSON.stringify({ manifest }),
     });
   }
 

@@ -72,10 +72,10 @@ export async function provision(options: ProvisionOptions): Promise<ProvisionRes
       })),
     };
     if (existingProviders.has(type)) {
-      await client.updateModelProvider(type, manifest);
+      await client.updateModelProvider(manifest);
       log(`  - ${type}: updated (${catalogEntry.models.length} models)`);
     } else {
-      await client.createModelProvider(type, manifest);
+      await client.createModelProvider(manifest);
       log(`  - ${type}: created (${catalogEntry.models.length} models)`);
     }
     providersConfigured.push(type);

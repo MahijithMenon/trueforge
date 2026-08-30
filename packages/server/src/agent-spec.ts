@@ -73,7 +73,12 @@ export interface BuildAgentSpecOptions {
 
 export function buildAgentSpec({ model }: BuildAgentSpecOptions): AgentSpec {
   return {
-    model: { name: model, params: { temperature: 0 } },
+    // No sampling params. Reasoning models (the gpt-5.x and o-series families)
+    // reject `temperature` outright, and the harness surfaces that as a provider
+    // warning on every call. Determinism here comes from the ordered procedure
+    // in the instructions and from plans being derived server-side, not from
+    // sampling settings.
+    model: { name: model },
     instructions: AGENT_INSTRUCTIONS,
     mcp_servers: [
       {
