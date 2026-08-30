@@ -103,6 +103,19 @@ Run against the live services, not asserted:
 | Control-plane route that invokes a tool | **none exists** — it can only relay a decision |
 | Turn with no message / approval with an invalid decision | `400` |
 
+### Verified failure modes
+
+Dependencies were taken down against the running services, not reasoned about:
+
+| Failure | Behaviour |
+|---|---|
+| Erasure tool server down | `/api/tools` returns `502` with a message naming the connector; `/api/estate` unaffected |
+| **Postgres stopped** | Both services stay up, health reports `degraded` with `database: unreachable: ECONNREFUSED` |
+| **Postgres restarted** | Both reconnect automatically; health returns to `ok` with no restart |
+| Harness unreachable | Control plane answers `502`; the console shows the command needed to fix it |
+
+The Postgres cases are there because both services originally **crashed outright** on a database restart — node-postgres emits `error` on the pool when an idle client dies, and with no listener Node terminates the process. Fixed in `packages/shared/src/postgres.ts`.
+
 ## Architecture
 
 ```mermaid
@@ -208,7 +221,7 @@ Secrets live only in `.env`, which is gitignored. No key is committed, logged, o
 ## Testing
 
 ```bash
-npm test         # 85 tests
+npm test         # 91 tests
 npm run lint
 npm run typecheck
 ```

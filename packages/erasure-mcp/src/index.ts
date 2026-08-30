@@ -6,7 +6,7 @@ import { startErasureMcpServer } from './server.ts';
 async function main(): Promise<void> {
   const config = loadConfig();
 
-  const pool = createPool(config.DATABASE_URL);
+  const pool = createPool({ connectionString: config.DATABASE_URL });
   // Fail fast: a tool server that cannot reach its database should not report ready.
   await pool.query('SELECT 1');
 

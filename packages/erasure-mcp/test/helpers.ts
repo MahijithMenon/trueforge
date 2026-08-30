@@ -39,7 +39,7 @@ export async function resetTestDatabase(pool: Pool): Promise<void> {
 
 export async function createTestPool(): Promise<Pool> {
   await ensureTestDatabase();
-  const pool = createPool(TEST_URL);
+  const pool = createPool({ connectionString: TEST_URL });
   await resetTestDatabase(pool);
   return pool;
 }

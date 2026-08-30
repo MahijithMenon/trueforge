@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server';
-import pg from 'pg';
+import { createPool } from '../../shared/src/postgres.ts';
 import { createApp } from './app.ts';
 import { allowedOrigins, loadServerConfig } from './config.ts';
 import { TrueForgeClient } from './trueforge.ts';
@@ -7,12 +7,7 @@ import { TrueForgeClient } from './trueforge.ts';
 async function main(): Promise<void> {
   const config = loadServerConfig();
 
-  const pool = new pg.Pool({
-    connectionString: config.DATABASE_URL,
-    max: 8,
-    connectionTimeoutMillis: 5_000,
-    statement_timeout: 15_000,
-  });
+  const pool = createPool({ connectionString: config.DATABASE_URL });
   await pool.query('SELECT 1');
 
   const trueForge = new TrueForgeClient({ baseUrl: config.TRUEFORGE_BASE_URL });

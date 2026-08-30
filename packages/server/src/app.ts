@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import type { Pool } from 'pg';
 import { z } from 'zod';
 import { verifyChain } from '../../shared/src/audit-hash.ts';
+import { describeError } from '../../shared/src/postgres.ts';
 import { AGENT_NAME, MCP_SERVER_NAME } from './agent-spec.ts';
 import { getAuditTrail, getEstate } from './estate.ts';
 import { TrueForgeError, type TrueForgeClient } from './trueforge.ts';
@@ -51,8 +52,7 @@ export function createApp(deps: AppDeps): Hono {
       const status = error.status === 0 ? 502 : error.status;
       return c.json({ error: 'trueforge_error', message: error.message }, status as 502);
     }
-    const message = error instanceof Error ? error.message : 'Unexpected error';
-    return c.json({ error: 'internal_error', message }, 500);
+    return c.json({ error: 'internal_error', message: describeError(error) }, 500);
   });
 
   app.get('/api/health', async (c) => {
@@ -61,13 +61,13 @@ export function createApp(deps: AppDeps): Hono {
       await pool.query('SELECT 1');
       checks.database = 'ok';
     } catch (error) {
-      checks.database = `unreachable: ${(error as Error).message}`;
+      checks.database = `unreachable: ${describeError(error)}`;
     }
     try {
       await trueForge.listAgents();
       checks.trueforge = 'ok';
     } catch (error) {
-      checks.trueforge = `unreachable: ${(error as Error).message}`;
+      checks.trueforge = `unreachable: ${describeError(error)}`;
     }
     const healthy = Object.values(checks).every((v) => v === 'ok');
     return c.json({ status: healthy ? 'ok' : 'degraded', checks }, healthy ? 200 : 503);
