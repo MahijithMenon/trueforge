@@ -1,0 +1,22 @@
+# Real Postgres for the demo. Tombstone deletes real rows from a real database;
+# nothing on the primary demo path is mocked.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tombstone-postgres
+    environment:
+      POSTGRES_USER: tombstone
+      POSTGRES_PASSWORD: tombstone
+      POSTGRES_DB: tombstone
+    ports:
+      - "55432:5432"
+    volumes:
+      - tombstone-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tombstone -d tombstone"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  tombstone-pgdata:
