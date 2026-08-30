@@ -135,14 +135,15 @@ tearing down a live erasure) and the reducer's approval state transitions.
 **Link:** <https://github.com/MahijithMenon/trueforge/compare/feat/console...test/suite-and-refusal-audit-fix?expand=1>
 *(retarget base to `main` after PR 3 merges)*
 
-**Title:** `test: cover the erasure guards, and fix refusals being lost on rollback`
+**Title:** `test: cover the erasure guards, fix refusals lost on rollback, and survive a DB restart`
 
 **Body:**
 
 ```markdown
-52 tests across the hash chain, retention policy, plan validation, object-store
-path safety, and a real-Postgres integration suite that runs in its own
-database so the demo estate is never touched.
+91 tests across the hash chain, retention policy, plan validation, object-store
+path safety, the console reducer and the approval gate component, plus a
+real-Postgres integration suite that runs in its own database so the demo
+estate is never touched.
 
 ### A real defect the suite found
 
@@ -162,6 +163,20 @@ failure cannot mask the refusal itself.
   sibling directory sharing the root prefix does not slip through;
 - replaying an approved execution returns the original receipt.
 
+### A second defect, found by taking dependencies down
+
+Stopping Postgres under the running services **killed both of them**.
+node-postgres emits `error` on the pool when an idle client dies — what a
+database restart or a proxy reaping a connection causes — and with no listener
+Node terminates the process. Pool construction moved to `packages/shared` with
+an idle-client error listener; verified by stopping and restarting Postgres
+against the live system, after which both services degrade and then recover
+with no intervention.
+
+Health output also read `database: unreachable: ` because the driver error had
+an empty message; `describeError` now falls back through errno code,
+AggregateError members and error name.
+
 ### Build fixes
 
 `erasure-mcp` could not be typechecked at all: inferring through the MCP SDK's
@@ -178,6 +193,7 @@ explanation).
 
 ### Review focus
 
-Whether the `defineTool` cast loses any real type safety, and the best-effort
-error handling in `recordRefusal`.
+Whether the `defineTool` cast loses any real type safety, the best-effort error
+handling in `recordRefusal`, and whether `describeError` can ever return an
+empty string (there is a test asserting it cannot).
 ```
