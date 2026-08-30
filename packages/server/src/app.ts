@@ -3,7 +3,7 @@ import { cors } from 'hono/cors';
 import type { Pool } from 'pg';
 import { z } from 'zod';
 import { verifyChain } from '../../shared/src/audit-hash.ts';
-import { AGENT_NAME } from './agent-spec.ts';
+import { AGENT_NAME, MCP_SERVER_NAME } from './agent-spec.ts';
 import { getAuditTrail, getEstate } from './estate.ts';
 import { TrueForgeError, type TrueForgeClient } from './trueforge.ts';
 
@@ -74,6 +74,30 @@ export function createApp(deps: AppDeps): Hono {
   });
 
   app.get('/api/config', (c) => c.json({ agentName: AGENT_NAME }));
+
+  /**
+   * The connector's tools and their risk tier, as the harness itself sees them.
+   *
+   * The console badges every tool call with this, so what the operator reads on
+   * screen is derived from the same annotations that decide whether the harness
+   * pauses — not from a hardcoded list that could drift out of step.
+   */
+  app.get('/api/tools', async (c) => {
+    const response = (await trueForge.listMcpServerTools(MCP_SERVER_NAME)) as {
+      data?: { name: string; description?: string; annotations?: Record<string, unknown> }[];
+    };
+    const tools = (response.data ?? []).map((tool) => {
+      const annotations = tool.annotations ?? {};
+      const tier =
+        annotations.destructiveHint === true
+          ? 'destructive'
+          : annotations.readOnlyHint === true
+            ? 'read-only'
+            : 'write';
+      return { name: tool.name, description: tool.description ?? '', tier, annotations };
+    });
+    return c.json({ server: MCP_SERVER_NAME, tools });
+  });
 
   /** Ground truth from Postgres, not from the agent. */
   app.get('/api/estate', async (c) => c.json(await getEstate(pool)));
