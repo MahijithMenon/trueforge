@@ -33,7 +33,7 @@ export default tseslint.config(
   },
   {
     // The console is a browser app.
-    files: ['packages/console/src/**/*.{ts,tsx}'],
+    files: ['packages/console/src/**/*.{ts,tsx}', 'packages/console/test/**/*.{ts,tsx}'],
     languageOptions: { globals: { ...globals.browser } },
   },
   {
@@ -43,7 +43,7 @@ export default tseslint.config(
   {
     // Scripts and tests are operator-facing or throwaway; console output is
     // the point in one and assertions carry the meaning in the other.
-    files: ['scripts/**/*.mjs', 'packages/*/test/**/*.ts'],
+    files: ['scripts/**/*.mjs', 'packages/*/test/**/*.{ts,tsx}'],
     rules: { 'no-console': 'off' },
   },
 );

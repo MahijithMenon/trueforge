@@ -208,7 +208,7 @@ Secrets live only in `.env`, which is gitignored. No key is committed, logged, o
 ## Testing
 
 ```bash
-npm test         # 52 tests
+npm test         # 85 tests
 npm run lint
 npm run typecheck
 ```
@@ -225,7 +225,14 @@ npm run dev:mcp          # in another terminal
 node scripts/smoke-mcp.mjs
 ```
 
-What the tests cover: hash-chain tamper detection (edit, delete, reorder, re-point), plan validation branches, object-store path traversal, and the full erasure lifecycle including a legal hold placed *after* approval, a tampered stored plan, disposition escalation, blast-radius overrun, transactional rollback, and idempotent replay.
+What the tests cover:
+
+- **Hash chain** — tamper detection for edited, removed, reordered and re-pointed entries.
+- **Plan validation** — every refusal branch: hash mismatch, subject mismatch, table outside policy, disposition escalation, blast-radius overrun.
+- **Object store** — path traversal, NUL bytes, and a sibling directory sharing the root prefix.
+- **Erasure lifecycle** against real Postgres — including a legal hold placed *after* approval, transactional rollback, and idempotent replay.
+- **Console reducer** — approval state transitions, denial, tool tiering, and that a failed turn always explains itself.
+- **Approval gate component** — that it resolves the correct plan for the pending call, totals deletions and redactions correctly, warns when a plan cannot be resolved, and disables both choices while a decision is in flight.
 
 **This is not a claim of correctness.** It is a claim that the specific failure modes above are covered by tests that fail when the guard is removed. Known gaps are listed under Limitations.
 
