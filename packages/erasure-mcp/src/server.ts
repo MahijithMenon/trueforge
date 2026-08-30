@@ -6,6 +6,17 @@ import { registerErasureTools, type ToolContext } from './tools.ts';
 
 const MAX_BODY_BYTES = 1_000_000;
 
+/** Carries an HTTP status so the handler can answer properly instead of
+ *  dropping the connection. */
+class HttpError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'HttpError';
+    this.status = status;
+  }
+}
+
 /** Constant-time bearer comparison so the token cannot be recovered by timing. */
 function tokenMatches(provided: string, expected: string): boolean {
   const a = Buffer.from(provided, 'utf8');
@@ -27,8 +38,10 @@ function readBody(req: http.IncomingMessage): Promise<unknown> {
     req.on('data', (chunk: Buffer) => {
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
-        reject(new Error('Request body too large'));
-        req.destroy();
+        // Stop reading, but let the handler send a real 413 first; destroying
+        // the socket here would give the client a bare connection reset.
+        req.pause();
+        reject(new HttpError(413, `Request body exceeds ${MAX_BODY_BYTES} bytes.`));
         return;
       }
       chunks.push(chunk);
@@ -39,7 +52,7 @@ function readBody(req: http.IncomingMessage): Promise<unknown> {
       try {
         resolve(JSON.parse(raw));
       } catch {
-        reject(new Error('Request body is not valid JSON'));
+        reject(new HttpError(400, 'Request body is not valid JSON.'));
       }
     });
     req.on('error', reject);
@@ -91,8 +104,11 @@ export async function startErasureMcpServer(opts: {
         res.end();
         return;
       }
+      const status = error instanceof HttpError ? error.status : 400;
       const message = error instanceof Error ? error.message : 'Internal error';
-      sendJson(res, 400, { error: 'bad_request', message });
+      sendJson(res, status, { error: status === 413 ? 'payload_too_large' : 'bad_request', message });
+      // Only now is it safe to abandon whatever the client is still sending.
+      if (status === 413) req.destroy();
     });
   });
 

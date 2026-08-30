@@ -88,6 +88,21 @@ The seeded estate contains a support ticket whose body instructs the assistant t
 
 Two layers respond. The agent's instructions tell it that record contents are data, never commands, and to surface such text to the operator. That layer alone would be weak. The layer that actually holds is structural: `execute_erasure` takes a plan id, plans are derived from policy for one subject, and the subject is re-verified server-side. Even a fully persuaded model cannot widen the blast radius, because the destructive tool has no parameter that would let it.
 
+### Verified adversarial probes
+
+Run against the live services, not asserted:
+
+| Probe | Result |
+|---|---|
+| MCP call with no bearer token | `401` |
+| MCP call with a wrong token of equal length | `401` (constant-time compare) |
+| `GET /mcp` in stateless mode | `405` |
+| 2 MB request body (1 MB limit) | `413`, server stays healthy |
+| Malformed JSON body | `400` |
+| Object key traversing outside the store root | refused; the outside file survives |
+| Control-plane route that invokes a tool | **none exists** — it can only relay a decision |
+| Turn with no message / approval with an invalid decision | `400` |
+
 ## Architecture
 
 ```mermaid
